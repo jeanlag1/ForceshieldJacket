@@ -5,12 +5,7 @@ import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as Speech from 'expo-speech';
 import * as FileSystem from 'expo-file-system';
 
-
- 
-
-
 export default function App() {
-  // const [hasPermission, setHasPermission] = useState(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [distance, setDistance] = useState(null);
   const [cameraRef, setCameraRef] = useState(null);
@@ -21,8 +16,8 @@ export default function App() {
   const [isEnabled, setIsEnabled] = useState(false);
   const toggleSwitch = () => setIsEnabled(previousState => !previousState);
 
-  // const [facing, setFacing] = useState<CameraType>('back');
-  
+
+ // Function using GPT to describe image (FAILED)
   const analyzeSceneWithGpt = async (photo) => {
     const base64Image = await FileSystem.readAsStringAsync(photo.uri, { encoding: FileSystem.EncodingType.Base64 });
     const gptPrompt = `You are given an image. Here's the base64 representation: ${base64Image}. Can you describe the scene in detail?`;
@@ -43,7 +38,7 @@ export default function App() {
           },
           {
             headers: {
-              'Authorization': ``,
+              'Authorization': ``, // removed the key for privacy
               'Content-Type': 'application/json'
             }
           }
@@ -53,7 +48,6 @@ export default function App() {
         console.log(description);
         setSceneDescription(description);
         setIsSpeaking(true);
-        // const message = `Warning! Object detected at approximately ${fetchedDistance.toFixed(2)} centimeters.`;
         Speech.speak(description, {
             onDone: () => setIsSpeaking(false),  
             onError: () => setIsSpeaking(false), 
@@ -74,27 +68,25 @@ export default function App() {
   apiCall();
    
   };
-  
+
+
+   // Function using Azure Computer Vision api to describe image (TODO: Bug with image format)
    const analyzeSceneWithAzure = async (photo) => {
       try {
-        // Read the image as base64
         const base64Image = await FileSystem.readAsStringAsync(photo.uri, { encoding: FileSystem.EncodingType.Base64 });
-        
-        // Convert the base64 string to a format suitable for the API (binary)
         const imageData = await RNFetchBlob.fs.readFile(imageUri, 'base64');
         console.log(imageData);
         const endpoint = "https://ms-hack-proj.cognitiveservices.azure.com/vision/v3.0/analyze?visualFeatures=Description";
         const response = await axios.post(
           endpoint,
-          Buffer.from(base64Image, 'base64'), // Send the image data as binary
+          Buffer.from(base64Image, 'base64'),
           {
             headers: {
               'Ocp-Apim-Subscription-Key': '',
-              'Content-Type': 'application/octet-stream' // Binary content type
+              'Content-Type': 'application/octet-stream'
             }
           }
         );
-
         const description = response.data.description.captions[0].text;
         setSceneDescription(description);
         console.log(description);
@@ -106,16 +98,13 @@ export default function App() {
 
   const describeSceneWithBLIP = async (imageUri, fetchedDistance) => {
     try {
-      // Convert the image to base64
       const base64Image = await FileSystem.readAsStringAsync(imageUri, {
         encoding: FileSystem.EncodingType.Base64,
       });
 
-      // Hugging Face API Key and endpoint
-      const apiKey = '';  // Replace with your Hugging Face API key
+      const apiKey = '';  // remove api key for security purposes
       const apiUrl = 'https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base';
 
-      // Send the image to Hugging Face API for analysis
       const response = await axios.post(
         apiUrl,
         {
@@ -132,7 +121,6 @@ export default function App() {
         }
       );
 
-      // Check if the response contains a description
       if (response.data && response.data[0]?.generated_text) {
         const description = response.data[0].generated_text;
          console.log(description);
@@ -153,8 +141,6 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      // const { status } = await Camera.requestCameraPermissionsAsync();
-      // setHasPermission(status === 'granted');
       requestPermission();
     })();
   }, []);
@@ -167,16 +153,12 @@ export default function App() {
           const fetchedDistance = Math.min(response.data.distance1.toFixed(2), response.data.distance2.toFixed(2) );
           setDistance(fetchedDistance);
 
-          if (fetchedDistance < 100) {
-            // Take a picture when distance is less than 15 cm
-            if (cameraRef) {
-              const capturedPhoto = await cameraRef.takePictureAsync();
-              setPhoto(capturedPhoto);
-              console.log('Picture taken:', capturedPhoto.uri);
-              setLastPictureTime(Date.now());
-              await describeSceneWithBLIP(capturedPhoto.uri, fetchedDistance);
-              
-            }
+          if (fetchedDistance < 100 && cameraRef) {
+             const capturedPhoto = await cameraRef.takePictureAsync();
+             setPhoto(capturedPhoto);
+             console.log('Picture taken:', capturedPhoto.uri);
+             setLastPictureTime(Date.now());
+             await describeSceneWithBLIP(capturedPhoto.uri, fetchedDistance);
           }
         }
       } catch (error) {
